@@ -1,0 +1,61 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Mon Inventaire de Nourriture</title>
+    <style>
+        body { font-family: sans-serif; padding: 20px; text-align: center; }
+        #inventory { list-style-type: none; padding: 0; max-width: 500px; margin: 20px auto; }
+        #inventory li { background-color: #f0f0f0; margin-bottom: 10px; padding: 10px; border-radius: 5px; }
+    </style>
+</head>
+<body>
+    <h1>Mon Inventaire de Nourriture</h1>
+    <ul id="inventory"></ul>
+
+    <script>
+        const API_QRBOT_URL = 'https://ioshelp.qrbot.net/business/lookup_barcode?barcode=';
+        const API_SHEETS_URL = 'https://script.google.com/macros/s/AKfycbw7WoJo3kXQRTSBGcy9ODaEKrLqIkmUJmu15ApOI8QBwpjrhkagQCemgSGUvfkbfw/exec'; // REMPLACEZ CETTE LIGNE
+
+        async function fetchAndSaveItem(barcode) {
+            try {
+                const qrbotResponse = await fetch(`${API_QRBOT_URL}${barcode}`);
+                const qrbotData = await qrbotResponse.json();
+
+                if (qrbotData && qrbotData.name) {
+                    const itemName = qrbotData.name;
+                    const sheetsResponse = await fetch(API_SHEETS_URL, {
+                        method: 'POST',
+                        body: new URLSearchParams({ barcode: barcode, itemName: itemName })
+                    });
+
+                    const sheetsData = await sheetsResponse.text();
+
+                    if (sheetsData.trim() === 'OK') {
+                        const inventoryList = document.getElementById('inventory');
+                        const li = document.createElement('li');
+                        li.textContent = itemName;
+                        inventoryList.appendChild(li);
+                        alert(`${itemName} a été ajouté à votre inventaire !`);
+                    } else {
+                        alert("Erreur lors de l'enregistrement dans Google Sheets.");
+                    }
+                } else {
+                    alert("Article non trouvé. Veuillez réessayer.");
+                }
+            } catch (error) {
+                console.error("Erreur :", error);
+                alert("Une erreur s'est produite. Veuillez vérifier la connexion.");
+            }
+        }
+
+        const urlParams = new URLSearchParams(window.location.search);
+        const barcodeFromUrl = urlParams.get('barcode');
+
+        if (barcodeFromUrl) {
+            fetchAndSaveItem(barcodeFromUrl);
+        }
+    </script>
+</body>
+</html>
