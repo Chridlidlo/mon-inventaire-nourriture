@@ -14,48 +14,9 @@
     <h1>Mon Inventaire de Nourriture</h1>
     <ul id="inventory"></ul>
 
-    <script>
-        const API_QRBOT_URL = 'https://ioshelp.qrbot.net/business/lookup_barcode?barcode=';
-        const API_SHEETS_URL = 'https://script.google.com/macros/s/AKfycbw7WoJo3kXQRTSBGcy9ODaEKrLqIkmUJmu15ApOI8QBwpjrhkagQCemgSGUvfkbfw/exec'; // REMPLACEZ CETTE LIGNE
-
-        async function fetchAndSaveItem(barcode) {
-            try {
-                const qrbotResponse = await fetch(`${API_QRBOT_URL}${barcode}`);
-                const qrbotData = await qrbotResponse.json();
-
-                if (qrbotData && qrbotData.name) {
-                    const itemName = qrbotData.name;
-                    const sheetsResponse = await fetch(API_SHEETS_URL, {
-                        method: 'POST',
-                        body: new URLSearchParams({ barcode: barcode, itemName: itemName })
-                    });
-
-                    const sheetsData = await sheetsResponse.text();
-
-                    if (sheetsData.trim() === 'OK') {
-                        const inventoryList = document.getElementById('inventory');
-                        const li = document.createElement('li');
-                        li.textContent = itemName;
-                        inventoryList.appendChild(li);
-                        alert(`${itemName} a été ajouté à votre inventaire !`);
-                    } else {
-                        alert("Erreur lors de l'enregistrement dans Google Sheets.");
-                    }
-                } else {
-                    alert("Article non trouvé. Veuillez réessayer.");
-                }
-            } catch (error) {
-                console.error("Erreur :", error);
-                alert("Une erreur s'est produite. Veuillez vérifier la connexion.");
-            }
-        }
-
-        const urlParams = new URLSearchParams(window.location.search);
-        const barcodeFromUrl = urlParams.get('barcode');
-
-        if (barcodeFromUrl) {
-            fetchAndSaveItem(barcodeFromUrl);
-        }
-    </script>
+   <script>
+  // Cette version du site ne fait qu'afficher un message de confirmation
+  // après le scan. Pour voir l'inventaire complet, il faut aller sur votre Google Sheet.
+</script>
 </body>
 </html>
