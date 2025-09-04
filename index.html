@@ -6,6 +6,186 @@
     <title>Gestion d'Inventaire Web</title>
     <style>
         body {
+            <script>
+            document.addEventListener("DOMContentLoaded", () => {
+    // Les sélecteurs pour les éléments HTML
+    const scanButton = document.getElementById("scanButton");
+    const manualEntry = document.getElementById("manualEntry");
+    const addButton = document.getElementById("addButton");
+    const openManualEntryButton = document.getElementById("openManualEntryButton");
+    const searchEntry = document.getElementById("searchEntry");
+    const inventoryBody = document.getElementById("inventoryBody");
+    const deleteButton = document.getElementById("deleteButton");
+
+    const productName = document.getElementById("productName");
+    const productBrand = document.getElementById("productBrand");
+    const productCategory = document.getElementById("productCategory");
+    const productQuantity = document.getElementById("productQuantity");
+    const productImage = document.getElementById("productImage");
+
+    // Fonction pour récupérer les informations d'un produit depuis l'API OpenFoodFacts
+    async function getProductInfo(barcode) {
+        const apiUrl = `https://world.openfoodfacts.org/api/v0/product/${barcode}.json`;
+        try {
+            const response = await fetch(apiUrl);
+            const data = await response.json();
+            if (data.status === 1) {
+                const product = data.product;
+                return {
+                    code: barcode,
+                    nom: product.product_name || "Inconnu",
+                    marque: product.brands || "Inconnu",
+                    catégorie: product.categories || "Inconnu",
+                    quantité: product.quantity || "N/A",
+                    image: product.image_url || null
+                };
+            }
+        } catch (error) {
+            console.error("Erreur lors de la récupération des données :", error);
+        }
+        return null;
+    }
+
+    // Fonction pour charger l'inventaire depuis le stockage local (simule le fichier CSV)
+    function loadInventory() {
+        const inventory = JSON.parse(localStorage.getItem("inventory")) || [];
+        return inventory;
+    }
+
+    // Fonction pour sauvegarder l'inventaire dans le stockage local
+    function saveInventory(inventory) {
+        localStorage.setItem("inventory", JSON.stringify(inventory));
+    }
+
+    // Fonction pour mettre à jour l'affichage de l'inventaire
+    function refreshInventory(filterText = "") {
+        const inventory = loadInventory();
+        inventoryBody.innerHTML = ""; // Vide le tableau
+
+        const filteredInventory = inventory.filter(product =>
+            product.nom.toLowerCase().includes(filterText.toLowerCase()) ||
+            product.marque.toLowerCase().includes(filterText.toLowerCase())
+        );
+
+        filteredInventory.forEach(product => {
+            const row = document.createElement("tr");
+            row.dataset.code = product.code;
+            row.innerHTML = `
+                <td>${product.code}</td>
+                <td>${product.nom}</td>
+                <td>${product.marque}</td>
+                <td>${product.catégorie}</td>
+                <td>${product.quantité}</td>
+                <td><input type="checkbox" class="delete-checkbox"></td>
+            `;
+            inventoryBody.appendChild(row);
+        });
+    }
+
+    // Fonction pour mettre à jour les informations du produit affichées
+    function updateUI(productInfo) {
+        productName.textContent = `Produit : ${productInfo.nom}`;
+        productBrand.textContent = `Marque : ${productInfo.marque}`;
+        productCategory.textContent = `Catégorie : ${productInfo.catégorie}`;
+        productQuantity.textContent = `Quantité : ${productInfo.quantité}`;
+        if (productInfo.image) {
+            productImage.src = productInfo.image;
+            productImage.style.display = "block";
+        } else {
+            productImage.style.display = "none";
+        }
+    }
+
+    // Fonction pour ajouter un produit à l'inventaire
+    async function addProductByCode(barcode) {
+        const productInfo = await getProductInfo(barcode);
+        if (productInfo) {
+            const inventory = loadInventory();
+            inventory.push(productInfo);
+            saveInventory(inventory);
+            updateUI(productInfo);
+            refreshInventory();
+            alert("Produit ajouté avec succès !");
+        } else {
+            alert("Produit non trouvé !");
+        }
+    }
+
+    // Gère le scan de code-barres (nécessite une bibliothèque externe comme QuaggaJS)
+    scanButton.addEventListener("click", () => {
+        alert("Le scan de code-barres nécessite une bibliothèque externe (ex: QuaggaJS) et un environnement sécurisé (HTTPS).");
+        // Logique de scan ici, par exemple :
+        // Quagga.init({ ... }, function(err) { ... });
+    });
+
+    // Gère l'ajout manuel via le champ de texte
+    addButton.addEventListener("click", () => {
+        const barcode = manualEntry.value.trim();
+        if (barcode) {
+            addProductByCode(barcode);
+            manualEntry.value = "";
+        } else {
+            alert("Veuillez entrer un code-barres.");
+        }
+    });
+
+    // Gère la recherche
+    searchEntry.addEventListener("keyup", (event) => {
+        refreshInventory(event.target.value);
+    });
+
+    // Gère la suppression d'un produit
+    deleteButton.addEventListener("click", () => {
+        const checkboxes = document.querySelectorAll(".delete-checkbox:checked");
+        if (checkboxes.length === 0) {
+            alert("Sélectionnez au moins un produit à supprimer.");
+            return;
+        }
+
+        const inventory = loadInventory();
+        const updatedInventory = inventory.filter(product => {
+            let keep = true;
+            checkboxes.forEach(checkbox => {
+                const row = checkbox.closest("tr");
+                if (row.dataset.code === product.code) {
+                    keep = false;
+                }
+            });
+            return keep;
+        });
+
+        saveInventory(updatedInventory);
+        refreshInventory();
+        alert("Produit(s) supprimé(s) avec succès !");
+    });
+    
+    // Fonction pour ouvrir une fenêtre modale d'ajout manuel (simulée ici)
+    openManualEntryButton.addEventListener("click", () => {
+        const name = prompt("Nom du produit :");
+        if (!name) return;
+        const brand = prompt("Marque du produit :");
+        if (!brand) return;
+        const category = prompt("Catégorie du produit :");
+        if (!category) return;
+        const quantity = prompt("Quantité du produit :");
+        if (!quantity) return;
+
+        // Générer un code unique (similaire à np.random.randint)
+        const barcode = `manual-${Math.floor(Math.random() * 100000) + 100000}`;
+        const productInfo = { code: barcode, nom: name, marque: brand, catégorie: category, quantité: quantity, image: null };
+        
+        const inventory = loadInventory();
+        inventory.push(productInfo);
+        saveInventory(inventory);
+        updateUI(productInfo);
+        refreshInventory();
+        alert("Produit ajouté manuellement avec succès !");
+    });
+
+    // Appel initial pour afficher l'inventaire au chargement de la page
+    refreshInventory();
+});
+        </script>
             font-family: Arial, sans-serif;
             margin: 20px;
             background-color: #f4f4f4;
