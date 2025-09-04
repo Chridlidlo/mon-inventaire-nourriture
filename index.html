@@ -12,15 +12,24 @@
     <!-- Firebase SDKs -->
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
-        import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        import { getAuth, signInAnonymously } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
         import { getFirestore, collection, addDoc, onSnapshot, query, orderBy, deleteDoc, doc } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
         import { setLogLevel } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
         setLogLevel('Debug');
 
-        // Global variables provided by the environment
-        const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
-        const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : null;
-        const initialAuthToken = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : null;
+        // ÉTAPE 1 : Configuration Firebase
+        // NOTE: Les valeurs sont fournies automatiquement dans cet environnement.
+        // Celles-ci proviennent de la configuration que vous avez partagée.
+        const firebaseConfig = {
+            apiKey: "AIzaSyB...FgJJS5GXI",
+            authDomain: "inventaire-9edcd.firebaseapp.com",
+            projectId: "inventaire-9edcd",
+            storageBucket: "inventaire-9edcd.appspot.com",
+            messagingSenderId: "809592205965",
+            appId: "1:809592205965:web:91b3aab9160c06798670c4",
+            measurementId: "G-Z5QDK9YDZ"
+        };
+        const firebaseAppId = "1:809592205965:web:91b3aab9160c06798670c4";
 
         let db = null;
         let auth = null;
@@ -59,31 +68,23 @@
         }
 
         // Initialize Firebase
-        if (firebaseConfig) {
-            const app = initializeApp(firebaseConfig);
-            db = getFirestore(app);
-            auth = getAuth(app);
+        const globalFirebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : firebaseConfig;
+        const globalFirebaseAppId = typeof __app_id !== 'undefined' ? __app_id : firebaseAppId;
 
-            onAuthStateChanged(auth, async (user) => {
-                if (user) {
-                    userId = user.uid;
-                } else if (initialAuthToken) {
-                    try {
-                        await signInWithCustomToken(auth, initialAuthToken);
-                    } catch (error) {
-                        console.error("Erreur d'authentification avec le jeton :", error);
-                        signInAnonymously(auth);
-                    }
-                } else {
-                    signInAnonymously(auth);
-                }
-                isAuthReady = true;
-                if (userId) {
-                    document.getElementById('user-id').textContent = `ID utilisateur : ${userId}`;
-                    setupFirestoreListener('timestamp'); // Trier par défaut par date d'ajout
-                }
-            });
-        }
+        const app = initializeApp(globalFirebaseConfig);
+        db = getFirestore(app);
+        auth = getAuth(app);
+
+        // Gère l'authentification anonyme.
+        signInAnonymously(auth).then(() => {
+            userId = auth.currentUser.uid;
+            document.getElementById('user-id').textContent = `ID utilisateur : ${userId}`;
+            isAuthReady = true;
+            setupFirestoreListener('timestamp');
+        }).catch(error => {
+            console.error("Erreur d'authentification anonyme :", error);
+            showMessage("Erreur de connexion. Veuillez vérifier votre configuration Firebase.");
+        });
 
         // URL d'API pour les informations sur les produits
         const API_OPENFOODFACTS = "https://world.openfoodfacts.org/api/v0/product/";
@@ -127,7 +128,7 @@
                     Html5Qrcode.BarcodeFormat.EAN_13,
                     Html5Qrcode.BarcodeFormat.EAN_8,
                     Html5Qrcode.BarcodeFormat.UPC_A,
-                    Html5Qrcode.BarcodeFormat.UPC_E
+                    Html5QrCode.BarcodeFormat.UPC_E
                 ]
             };
             html5QrCode.start({ facingMode: "environment" }, config, onScanSuccess)
@@ -177,7 +178,7 @@
             }
             
             try {
-                const docRef = await addDoc(collection(db, `artifacts/${appId}/public/data/inventory_items`), {
+                const docRef = await addDoc(collection(db, `artifacts/${globalFirebaseAppId}/public/data/inventory_items`), {
                     barcode: barcode,
                     name: itemName,
                     timestamp: Date.now()
@@ -194,12 +195,12 @@
             let q;
             
             if (sortField === 'timestamp') {
-                q = query(collection(db, `artifacts/${appId}/public/data/inventory_items`), orderBy("timestamp", "desc"));
+                q = query(collection(db, `artifacts/${globalFirebaseAppId}/public/data/inventory_items`), orderBy("timestamp", "desc"));
                 onSnapshot(q, (querySnapshot) => {
                     renderInventory(querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
                 });
             } else {
-                const collectionRef = collection(db, `artifacts/${appId}/public/data/inventory_items`);
+                const collectionRef = collection(db, `artifacts/${globalFirebaseAppId}/public/data/inventory_items`);
                 onSnapshot(collectionRef, (querySnapshot) => {
                     let items = querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
                     items.sort((a, b) => a.name.localeCompare(b.name));
@@ -236,7 +237,7 @@
         async function deleteItem(docId) {
             showConfirmation("Voulez-vous vraiment supprimer cet article ?", async () => {
                 try {
-                    await deleteDoc(doc(db, `artifacts/${appId}/public/data/inventory_items`, docId));
+                    await deleteDoc(doc(db, `artifacts/${globalFirebaseAppId}/public/data/inventory_items`, docId));
                     showMessage("Article supprimé avec succès.");
                 } catch (error) {
                     console.error("Erreur lors de la suppression de l'article :", error);
@@ -247,13 +248,7 @@
 
         // On appelle la fonction pour charger l'inventaire au chargement de la page
         document.addEventListener('DOMContentLoaded', () => {
-            if (isAuthReady && userId) {
-                document.getElementById('user-id').textContent = `ID utilisateur : ${userId}`;
-            } else {
-                document.getElementById('user-id').textContent = "Authentification en cours...";
-            }
-
-            // Gérer le changement d'option de tri
+            document.getElementById('user-id').textContent = "Authentification en cours...";
             const sortSelect = document.getElementById('sort-options');
             sortSelect.addEventListener('change', (e) => {
                 setupFirestoreListener(e.target.value);
@@ -413,6 +408,9 @@
 <body>
     <div class="container">
         <h1>Mon Inventaire de Nourriture</h1>
+        <div class="scan-instructions">
+            <p><strong>Pour scanner, cliquez sur le bouton "Commencer le scan" ci-dessous.</strong> Vous n'avez pas besoin d'une autre application.</p>
+        </div>
         <p class="message" id="instruction-text">L'inventaire est mis à jour en scannant les codes-barres.</p>
         <div id="user-id"></div>
 
