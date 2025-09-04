@@ -7,6 +7,242 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;700&display=swap" rel="stylesheet">
+    <!-- Librairie pour le scan de codes-barres -->
+    <script src="https://unpkg.com/html5-qrcode" crossorigin="anonymous"></script>
+    <!-- Firebase SDKs -->
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+        import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        import { getFirestore, collection, addDoc, onSnapshot, query, orderBy, deleteDoc, doc } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+
+        // Global variables provided by the environment
+        const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
+        const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : null;
+        const initialAuthToken = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : null;
+
+        let db = null;
+        let auth = null;
+        let userId = null;
+        let isAuthReady = false;
+
+        // Message box UI (replacement for alert/confirm)
+        function showMessage(text) {
+            const messageBox = document.createElement('div');
+            messageBox.classList.add('message-box');
+            messageBox.textContent = text;
+            document.body.appendChild(messageBox);
+            setTimeout(() => {
+                messageBox.remove();
+            }, 3000);
+        }
+
+        function showConfirmation(text, onConfirm) {
+            const confirmationBox = document.createElement('div');
+            confirmationBox.classList.add('confirmation-box');
+            confirmationBox.innerHTML = `
+                <p>${text}</p>
+                <button class="confirm-btn">Oui</button>
+                <button class="cancel-btn">Non</button>
+            `;
+            document.body.appendChild(confirmationBox);
+
+            confirmationBox.querySelector('.confirm-btn').addEventListener('click', () => {
+                confirmationBox.remove();
+                onConfirm();
+            });
+
+            confirmationBox.querySelector('.cancel-btn').addEventListener('click', () => {
+                confirmationBox.remove();
+            });
+        }
+
+        // Initialize Firebase
+        if (firebaseConfig) {
+            const app = initializeApp(firebaseConfig);
+            db = getFirestore(app);
+            auth = getAuth(app);
+
+            onAuthStateChanged(auth, async (user) => {
+                if (user) {
+                    userId = user.uid;
+                } else if (initialAuthToken) {
+                    try {
+                        await signInWithCustomToken(auth, initialAuthToken);
+                    } catch (error) {
+                        console.error("Erreur d'authentification avec le jeton :", error);
+                        signInAnonymously(auth);
+                    }
+                } else {
+                    signInAnonymously(auth);
+                }
+                isAuthReady = true;
+                if (userId) {
+                    document.getElementById('user-id').textContent = `ID utilisateur : ${userId}`;
+                    setupFirestoreListener('timestamp'); // Trier par défaut par date d'ajout
+                }
+            });
+        }
+
+        // URL d'API pour les informations sur les produits
+        const API_OPENFOODFACTS = "https://world.openfoodfacts.org/api/v0/product/";
+        
+        // Initialisation du lecteur de code-barres
+        const html5QrCode = new Html5Qrcode("reader");
+        const scanBtn = document.getElementById('scan-btn');
+        const instructionText = document.getElementById('instruction-text');
+        let isScanning = false;
+
+        scanBtn.addEventListener('click', () => {
+            if (!isScanning) {
+                startScanning();
+                scanBtn.textContent = 'Arrêter le scan';
+                instructionText.textContent = 'Veuillez pointer la caméra vers un code-barres.';
+            } else {
+                stopScanning();
+                scanBtn.textContent = 'Commencer le scan';
+                instructionText.textContent = 'L\'inventaire est mis à jour en scannant les codes-barres.';
+            }
+            isScanning = !isScanning;
+        });
+
+        async function startScanning() {
+            const config = { fps: 10, qrbox: { width: 250, height: 250 } };
+            html5QrCode.start({ facingMode: "environment" }, config, onScanSuccess)
+                .catch(err => {
+                    console.error("Erreur de démarrage du scanner :", err);
+                    showMessage("Impossible de démarrer le scanner. Assurez-vous que la caméra est accessible et réessayez.");
+                    scanBtn.textContent = 'Commencer le scan';
+                    isScanning = false;
+                    instructionText.textContent = 'L\'inventaire est mis à jour en scannant les codes-barres.';
+                });
+        }
+
+        async function onScanSuccess(decodedText, decodedResult) {
+            console.log(`Code-barres détecté : ${decodedText}`);
+            // Arrêter le scan après avoir trouvé le premier code-barres
+            stopScanning();
+            scanBtn.textContent = 'Commencer le scan';
+            isScanning = false;
+            instructionText.textContent = 'L\'inventaire est mis à jour en scannant les codes-barres.';
+
+            // Ajouter l'article à l'inventaire Firebase
+            await addItemToFirebase(decodedText);
+        }
+
+        function stopScanning() {
+            if (html5QrCode.isScanning) {
+                html5QrCode.stop().catch(err => console.error("Erreur à l'arrêt du scanner:", err));
+            }
+        }
+
+        async function addItemToFirebase(barcode) {
+            if (!isAuthReady || !db) {
+                showMessage("L'application n'est pas encore prête. Veuillez réessayer.");
+                return;
+            }
+            
+            let itemName = "Nom non trouvé";
+            try {
+                const response = await fetch(`${API_OPENFOODFACTS}${barcode}.json`);
+                const data = await response.json();
+                
+                if (data.status === 1 && data.product && data.product.product_name) {
+                    itemName = data.product.product_name;
+                }
+            } catch (error) {
+                console.error("Erreur lors de la récupération du nom du produit :", error);
+            }
+            
+            try {
+                const docRef = await addDoc(collection(db, `artifacts/${appId}/public/data/inventory_items`), {
+                    barcode: barcode,
+                    name: itemName,
+                    timestamp: Date.now()
+                });
+                showMessage(`Article ajouté : ${itemName}`);
+            } catch (error) {
+                console.error("Erreur lors de l'ajout à Firestore :", error);
+                showMessage("Erreur lors de l'ajout de l'article à l'inventaire.");
+            }
+        }
+
+        // Fonction pour gérer les mises à jour en temps réel
+        function setupFirestoreListener(sortField) {
+            const inventoryList = document.getElementById('inventory');
+            let q;
+            
+            // Note: Firebase Firestore ne permet pas de trier sur des champs qui ne sont pas indexés
+            // Le tri par 'name' peut nécessiter une mise à jour manuelle des index dans la console Firebase
+            // Pour l'instant, nous allons utiliser le tri en mémoire pour 'name' et le tri direct pour 'timestamp'
+            if (sortField === 'timestamp') {
+                q = query(collection(db, `artifacts/${appId}/public/data/inventory_items`), orderBy("timestamp", "desc"));
+                onSnapshot(q, (querySnapshot) => {
+                    renderInventory(querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
+                });
+            } else {
+                const collectionRef = collection(db, `artifacts/${appId}/public/data/inventory_items`);
+                onSnapshot(collectionRef, (querySnapshot) => {
+                    let items = querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+                    items.sort((a, b) => a.name.localeCompare(b.name));
+                    renderInventory(items);
+                });
+            }
+        }
+
+        function renderInventory(items) {
+            const inventoryList = document.getElementById('inventory');
+            inventoryList.innerHTML = '';
+            if (items.length > 0) {
+                items.forEach(item => {
+                    const li = document.createElement('li');
+                    li.textContent = item.name;
+                    li.setAttribute('data-barcode', item.barcode);
+                    
+                    const deleteBtn = document.createElement('button');
+                    deleteBtn.textContent = 'Supprimer';
+                    deleteBtn.classList.add('delete-btn');
+                    deleteBtn.onclick = () => deleteItem(item.id);
+
+                    li.appendChild(deleteBtn);
+                    inventoryList.appendChild(li);
+                });
+            } else {
+                const li = document.createElement('li');
+                li.textContent = "Aucun article dans l'inventaire.";
+                inventoryList.appendChild(li);
+            }
+        }
+
+
+        async function deleteItem(docId) {
+            showConfirmation("Voulez-vous vraiment supprimer cet article ?", async () => {
+                try {
+                    await deleteDoc(doc(db, `artifacts/${appId}/public/data/inventory_items`, docId));
+                    showMessage("Article supprimé avec succès.");
+                } catch (error) {
+                    console.error("Erreur lors de la suppression de l'article :", error);
+                    showMessage("Erreur lors de la suppression de l'article.");
+                }
+            });
+        }
+
+        // On appelle la fonction pour charger l'inventaire au chargement de la page
+        document.addEventListener('DOMContentLoaded', () => {
+            if (isAuthReady && userId) {
+                document.getElementById('user-id').textContent = `ID utilisateur : ${userId}`;
+            } else {
+                document.getElementById('user-id').textContent = "Authentification en cours...";
+            }
+
+            // Gérer le changement d'option de tri
+            const sortSelect = document.getElementById('sort-options');
+            sortSelect.addEventListener('change', (e) => {
+                setupFirestoreListener(e.target.value);
+            });
+        });
+
+    </script>
+
     <style>
         body {
             font-family: 'Roboto', sans-serif;
@@ -44,6 +280,9 @@
             text-align: left;
             border-left: 5px solid #4caf50;
             transition: transform 0.2s, box-shadow 0.2s;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
         }
         #inventory li:hover {
             transform: translateY(-2px);
@@ -54,54 +293,105 @@
             font-style: italic;
             color: #777;
         }
+        .delete-btn {
+            background-color: #e74c3c;
+            color: white;
+            border: none;
+            padding: 8px 12px;
+            border-radius: 5px;
+            cursor: pointer;
+            font-weight: 700;
+            transition: background-color 0.2s;
+        }
+        .delete-btn:hover {
+            background-color: #c0392b;
+        }
+        #reader {
+            width: 100%;
+            max-width: 500px;
+            margin-top: 20px;
+            border: 2px solid #333;
+            border-radius: 8px;
+        }
+        .scan-button {
+            background-color: #3498db;
+            color: white;
+            border: none;
+            padding: 12px 24px;
+            border-radius: 8px;
+            font-size: 16px;
+            cursor: pointer;
+            margin-top: 20px;
+            transition: background-color 0.2s;
+        }
+        .scan-button:hover {
+            background-color: #2980b9;
+        }
+        #user-id {
+            font-size: 12px;
+            margin-top: 10px;
+            color: #555;
+        }
+        .message-box, .confirmation-box {
+            position: fixed;
+            top: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            background-color: #333;
+            color: white;
+            padding: 15px 25px;
+            border-radius: 8px;
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.2);
+            z-index: 1000;
+            text-align: center;
+        }
+        .confirmation-box button {
+            margin: 5px;
+            padding: 8px 15px;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            font-weight: bold;
+        }
+        .confirm-btn {
+            background-color: #4caf50;
+            color: white;
+        }
+        .cancel-btn {
+            background-color: #e74c3c;
+            color: white;
+        }
+        .sort-container {
+            margin-top: 20px;
+            text-align: left;
+            width: 100%;
+            max-width: 800px;
+        }
     </style>
+
 </head>
 <body>
     <div class="container">
         <h1>Mon Inventaire de Nourriture</h1>
-        <p class="message">L'inventaire est mis à jour en scannant les codes-barres avec l'application QRbot.</p>
+        <p class="message" id="instruction-text">L'inventaire est mis à jour en scannant les codes-barres.</p>
+        <div id="user-id"></div>
+
+        <!-- Conteneur pour le lecteur de code-barres -->
+        <div id="reader"></div>
+        <button id="scan-btn" class="scan-button">Commencer le scan</button>
+
+        <!-- Menu de tri -->
+        <div class="sort-container">
+            <label for="sort-options">Trier par :</label>
+            <select id="sort-options">
+                <option value="timestamp">Date d'ajout</option>
+                <option value="name">Nom</option>
+            </select>
+        </div>
+
         <ul id="inventory">
             <!-- Les articles de l'inventaire seront affichés ici -->
         </ul>
     </div>
-
-    <script>
-        // L'URL de votre API Google Apps Script.
-        // Assurez-vous que cette URL est correcte et pointe vers votre script.
-        const API_SHEETS_URL = 'https://script.google.com/macros/s/AKfycby__37OYuLA-zDcfXI6Yx946MRY2rmkjl8ocTklGDlGpDyweMnB4dmu-sSRARkX3Q/exec';
-
-        // Fonction pour charger et afficher l'inventaire depuis la feuille Google Sheets
-        async function loadAndRenderInventory() {
-            const inventoryList = document.getElementById('inventory');
-            inventoryList.innerHTML = ''; // On vide la liste pour la mettre à jour
-
-            try {
-                // On fait une requête GET à notre API pour obtenir les données
-                const response = await fetch(API_SHEETS_URL);
-                const data = await response.json();
-                
-                if (Array.isArray(data) && data.length > 0) {
-                    data.forEach(item => {
-                        const li = document.createElement('li');
-                        li.textContent = item.name;
-                        inventoryList.appendChild(li);
-                    });
-                } else {
-                    const li = document.createElement('li');
-                    li.textContent = "Aucun article dans l'inventaire.";
-                    inventoryList.appendChild(li);
-                }
-            } catch (error) {
-                console.error("Erreur lors du chargement de l'inventaire :", error);
-                const li = document.createElement('li');
-                li.textContent = "Erreur de chargement. Vérifiez les paramètres de l'API.";
-                inventoryList.appendChild(li);
-            }
-        }
-
-        // On appelle la fonction pour charger l'inventaire au chargement de la page
-        document.addEventListener('DOMContentLoaded', loadAndRenderInventory);
-
-    </script>
 </body>
 </html>
