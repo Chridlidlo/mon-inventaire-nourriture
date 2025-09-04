@@ -3,20 +3,155 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Mon Inventaire de Nourriture</title>
+    <title>Gestion d'Inventaire Web</title>
     <style>
-        body { font-family: sans-serif; padding: 20px; text-align: center; }
-        #inventory { list-style-type: none; padding: 0; max-width: 500px; margin: 20px auto; }
-        #inventory li { background-color: #f0f0f0; margin-bottom: 10px; padding: 10px; border-radius: 5px; }
+        body {
+            font-family: Arial, sans-serif;
+            margin: 20px;
+            background-color: #f4f4f4;
+        }
+        .container {
+            max-width: 800px;
+            margin: auto;
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+        }
+        h1 {
+            text-align: center;
+            color: #333;
+        }
+        .section {
+            margin-bottom: 20px;
+        }
+        .section-header {
+            font-size: 1.2em;
+            font-weight: bold;
+            margin-bottom: 10px;
+            border-bottom: 2px solid #ddd;
+            padding-bottom: 5px;
+        }
+        .buttons {
+            display: flex;
+            gap: 10px;
+            justify-content: center;
+            margin-bottom: 15px;
+        }
+        button {
+            padding: 10px 15px;
+            font-size: 1em;
+            cursor: pointer;
+            border: none;
+            border-radius: 5px;
+            background-color: #007BFF;
+            color: white;
+            transition: background-color 0.3s;
+        }
+        button:hover {
+            background-color: #0056b3;
+        }
+        input[type="text"] {
+            width: calc(100% - 22px);
+            padding: 10px;
+            border: 1px solid #ccc;
+            border-radius: 5px;
+        }
+        .product-info {
+            text-align: center;
+            margin-top: 20px;
+        }
+        #productImage {
+            max-width: 150px;
+            height: auto;
+            margin-top: 10px;
+            border-radius: 5px;
+            box-shadow: 0 0 5px rgba(0, 0, 0, 0.2);
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 15px;
+        }
+        th, td {
+            border: 1px solid #ddd;
+            padding: 8px;
+            text-align: left;
+        }
+        th {
+            background-color: #f2f2f2;
+        }
     </style>
 </head>
 <body>
-    <h1>Mon Inventaire de Nourriture</h1>
-    <ul id="inventory"></ul>
 
-   <script>
-  // Cette version du site ne fait qu'afficher un message de confirmation
-  // après le scan. Pour voir l'inventaire complet, il faut aller sur votre Google Sheet.
-</script>
+    <div class="container">
+        <h1>Gestion d'Inventaire Web</h1>
+
+        <div class="section">
+            <div class="section-header">Scanner un produit</div>
+            <div class="buttons">
+                <button id="scanButton">📷 Scanner</button>
+            </div>
+            <input type="text" id="manualEntry" placeholder="Entrer un code-barres manuellement">
+            <button id="addButton">➕ Ajouter</button>
+        </div>
+
+        <div class="section product-info">
+            <div class="section-header">Informations du produit</div>
+            <p id="productName">Produit : </p>
+            <p id="productBrand">Marque : </p>
+            <p id="productCategory">Catégorie : </p>
+            <p id="productQuantity">Quantité : </p>
+            <img id="productImage" src="" alt="Image du produit" style="display: none;">
+        </div>
+        
+        <div class="section">
+            <div class="section-header">Ajouter un produit manuellement</div>
+            <button id="openManualEntryButton">➕ Ajouter manuellement</button>
+        </div>
+
+        <div class="section">
+            <div class="section-header">Rechercher un produit</div>
+            <input type="text" id="searchEntry" placeholder="Rechercher par nom ou marque">
+        </div>
+
+        <div class="section">
+            <div class="section-header">Inventaire</div>
+            <table id="inventoryTable">
+                <thead>
+                    <tr>
+                        <th>Code</th>
+                        <th>Nom</th>
+                        <th>Marque</th>
+                        <th>Catégorie</th>
+                        <th>Quantité</th>
+                        <th>Actions</th>
+                    </tr>
+                </thead>
+                <tbody id="inventoryBody">
+                    </tbody>
+            </table>
+            <button id="deleteButton">Supprimer le produit sélectionné</button>
+        </div>
+
+    </div>
+
+    <script>
+        // La logique JavaScript viendrait ici
+        // Elle inclurait les fonctions pour scanner, ajouter, supprimer et rafraîchir la table.
+        // Exemple de pseudo-code JavaScript :
+        // const scanButton = document.getElementById('scanButton');
+        // scanButton.addEventListener('click', () => {
+        //   // Logique pour accéder à la caméra et décoder le code-barres
+        //   // Puis appeler l'API OpenFoodFacts
+        //   // Puis mettre à jour le tableau
+        // });
+        // const searchEntry = document.getElementById('searchEntry');
+        // searchEntry.addEventListener('keyup', (event) => {
+        //   // Logique pour filtrer la table
+        // });
+    </script>
+
 </body>
 </html>
