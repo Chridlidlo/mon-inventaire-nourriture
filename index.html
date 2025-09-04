@@ -14,6 +14,8 @@
         import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
         import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
         import { getFirestore, collection, addDoc, onSnapshot, query, orderBy, deleteDoc, doc } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+        import { setLogLevel } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+        setLogLevel('Debug');
 
         // Global variables provided by the environment
         const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
@@ -90,6 +92,8 @@
         const html5QrCode = new Html5Qrcode("reader");
         const scanBtn = document.getElementById('scan-btn');
         const instructionText = document.getElementById('instruction-text');
+        const manualInput = document.getElementById('manual-input');
+        const addManualBtn = document.getElementById('add-manual-btn');
         let isScanning = false;
 
         scanBtn.addEventListener('click', () => {
@@ -105,8 +109,27 @@
             isScanning = !isScanning;
         });
 
+        addManualBtn.addEventListener('click', () => {
+            const barcode = manualInput.value.trim();
+            if (barcode) {
+                addItemToFirebase(barcode);
+                manualInput.value = '';
+            } else {
+                showMessage("Veuillez entrer un code-barres valide.");
+            }
+        });
+
         async function startScanning() {
-            const config = { fps: 10, qrbox: { width: 250, height: 250 } };
+            const config = { 
+                fps: 10,
+                qrbox: { width: 250, height: 250 },
+                formatsToDecode: [
+                    Html5Qrcode.BarcodeFormat.EAN_13,
+                    Html5Qrcode.BarcodeFormat.EAN_8,
+                    Html5Qrcode.BarcodeFormat.UPC_A,
+                    Html5Qrcode.BarcodeFormat.UPC_E
+                ]
+            };
             html5QrCode.start({ facingMode: "environment" }, config, onScanSuccess)
                 .catch(err => {
                     console.error("Erreur de démarrage du scanner :", err);
@@ -117,7 +140,7 @@
                 });
         }
 
-        async function onScanSuccess(decodedText, decodedResult) {
+        async function onScanSuccess(decodedText) {
             console.log(`Code-barres détecté : ${decodedText}`);
             // Arrêter le scan après avoir trouvé le premier code-barres
             stopScanning();
@@ -168,12 +191,8 @@
 
         // Fonction pour gérer les mises à jour en temps réel
         function setupFirestoreListener(sortField) {
-            const inventoryList = document.getElementById('inventory');
             let q;
             
-            // Note: Firebase Firestore ne permet pas de trier sur des champs qui ne sont pas indexés
-            // Le tri par 'name' peut nécessiter une mise à jour manuelle des index dans la console Firebase
-            // Pour l'instant, nous allons utiliser le tri en mémoire pour 'name' et le tri direct pour 'timestamp'
             if (sortField === 'timestamp') {
                 q = query(collection(db, `artifacts/${appId}/public/data/inventory_items`), orderBy("timestamp", "desc"));
                 onSnapshot(q, (querySnapshot) => {
@@ -367,6 +386,27 @@
             width: 100%;
             max-width: 800px;
         }
+        .manual-input-container {
+            margin-top: 20px;
+            width: 100%;
+            max-width: 500px;
+            display: flex;
+            gap: 10px;
+        }
+        .manual-input-container input {
+            flex-grow: 1;
+            padding: 10px;
+            border-radius: 8px;
+            border: 1px solid #ccc;
+        }
+        .manual-input-container button {
+            padding: 10px 15px;
+            background-color: #34495e;
+            color: white;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+        }
     </style>
 
 </head>
@@ -379,6 +419,12 @@
         <!-- Conteneur pour le lecteur de code-barres -->
         <div id="reader"></div>
         <button id="scan-btn" class="scan-button">Commencer le scan</button>
+        
+        <!-- Saisie manuelle -->
+        <div class="manual-input-container">
+            <input type="text" id="manual-input" placeholder="Entrer le code-barres manuellement">
+            <button id="add-manual-btn">Ajouter</button>
+        </div>
 
         <!-- Menu de tri -->
         <div class="sort-container">
